@@ -66,6 +66,15 @@ local D3bot_SaveMapNavMesh = D3bot.SaveMapNavMesh
 
 function D3bot.SaveMapNavMesh()
 	D3bot_SaveMapNavMesh()
+
+	local savetobase = db:query(string.format("INSERT INTO `d3botNuv` (map, date_unix, nav) VALUES ('%s', '%s', '%s') ON DUPLICATE KEY UPDATE date_unix = VALUES(date_unix), nav = VALUES(nav)", game.GetMap(), file.Time(D3bot.MapNavMeshPath, "DATA"), file.Read(D3bot.MapNavMeshPath, "DATA")))
+	function savetobase:onSuccess(data)
+		print( "Save nav map to db!" )
+	end
+	function savetobase:onError(err)
+		print("An error occured while executing the query: " .. err)
+	end
+	savetobase:start()
 	
 end
 
