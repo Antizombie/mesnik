@@ -34,7 +34,6 @@ function savedbnav(GetMap)
 	function query:onSuccess(data)
 		local row = data[1]
 		local navmesh = file.Read(D3bot.MapNavMeshPath, "DATA")
-		if navmesh == nil then return end
 		local timefile = file.Time(D3bot.MapNavMeshPath, "DATA")
 		if row == nil or (row["date_unix"] < timefile) and row["nav"] ~= navmesh then
 			local savetobase = db:query(string.format("INSERT INTO `d3botNuv` (map, date_unix, nav) VALUES ('%s', '%s', '%s') ON DUPLICATE KEY UPDATE date_unix = VALUES(date_unix), nav = VALUES(nav)", GetMap, timefile, navmesh))
@@ -45,7 +44,7 @@ function savedbnav(GetMap)
 				print("An error occured while executing the query: " .. err)
 			end
 			savetobase:start()
-		elseif row["nav"] == navmesh then print("Nav db = file") return
+		elseif navmesh == nil or row["nav"] == navmesh then return
 		else
 			file.Write( D3bot.MapNavMeshPath, row["nav"] )
 			print("Save nav map to file!")
