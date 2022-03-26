@@ -1,6 +1,7 @@
 local status, error = pcall( function() require('mysqloo') end )
 if not status or not D3bot then print( "No load mysqloo." ) return end
-local db
+local MesnikDB = {}
+local db = MesnikDB.db
 --d3bot to BD module
 file.CreateDir('mesnik')
 
@@ -29,29 +30,12 @@ end
 
 db = mysqloo.connect(DefaultOptions["Host"], DefaultOptions["User"], DefaultOptions["Password"], DefaultOptions["Database"], DefaultOptions["Port"])
 
-function savedbnav(GetMap)
-	local query = db:query(string.format("SELECT * FROM `d3botNuv` WHERE map = '%s'", GetMap)) -- In mysqloo 9 a query can be started before the database is connected
+function MesnikDB.GetNavMapDB(Map)
+	local query = db:query(string.format("SELECT * FROM `d3botNuv` WHERE map = '%s'", Map)) -- In mysqloo 9 a query can be started before the database is connected
 	function query:onSuccess(data)
 		local row = data[1]
-		local navmesh = file.Read(D3bot.MapNavMeshPath, "DATA")
-		local timefile = file.Time(D3bot.MapNavMeshPath, "DATA")
-		if row == nil or (row["date_unix"] < timefile) and row["nav"] ~= navmesh then
-			local savetobase = db:query(string.format("INSERT INTO `d3botNuv` (map, date_unix, nav) VALUES ('%s', '%s', '%s') ON DUPLICATE KEY UPDATE date_unix = VALUES(date_unix), nav = VALUES(nav)", GetMap, timefile, navmesh))
-			function savetobase:onSuccess(data)
-				print( "Save nav map to db!" )
-			end
-			function savetobase:onError(err)
-				print("An error occured while executing the query: " .. err)
-			end
-			savetobase:start()
-		elseif navmesh == nil or row["nav"] == navmesh then return
-		else
-			file.Write( D3bot.MapNavMeshPath, row["nav"] )
-			print("Save nav map to file!")
-			D3bot.LoadMapNavMesh()
-			D3bot.UpdateMapNavMeshUiSubscribers()
-			print("Reload nav map!")
-		end
+		if row == nil then print("No NavMesh map is DB!") end
+		MesnikDB.SynchronizationMap(row["map"],row["nav"],row["date_unix"])
 	end
 
 	function query:onError(err)
@@ -59,15 +43,10 @@ function savedbnav(GetMap)
 	end
 
 	query:start()
-
 end
 
-local D3bot_SaveMapNavMesh = D3bot.SaveMapNavMesh
-
-function D3bot.SaveMapNavMesh()
-	D3bot_SaveMapNavMesh()
-
-	local savetobase = db:query(string.format("INSERT INTO `d3botNuv` (map, date_unix, nav) VALUES ('%s', '%s', '%s') ON DUPLICATE KEY UPDATE date_unix = VALUES(date_unix), nav = VALUES(nav)", game.GetMap(), file.Time(D3bot.MapNavMeshPath, "DATA"), file.Read(D3bot.MapNavMeshPath, "DATA")))
+function MesnikDB.SaveNavMaptoDB(Map,NavMesh,TimeFile)
+	local savetobase = db:query(string.format("INSERT INTO `d3botNuv` (map, date_unix, nav) VALUES ('%s', '%s', '%s') ON DUPLICATE KEY UPDATE date_unix = VALUES(date_unix), nav = VALUES(nav)", Map, TimeFile, NavMesh))
 	function savetobase:onSuccess(data)
 		print( "Save nav map to db!" )
 	end
@@ -75,15 +54,49 @@ function D3bot.SaveMapNavMesh()
 		print("An error occured while executing the query: " .. err)
 	end
 	savetobase:start()
-	
+end
+
+function MesnikDB.SaveNavMaptoFile(Map,NavMeshfile,NavMesh)
+	file.Write( NavMeshfile, NavMesh )
+	print("Save nav map to file!")
+	if Map == game.GetMap() then
+		D3bot.LoadMapNavMesh()
+		D3bot.UpdateMapNavMeshUiSubscribers()
+		print("Reload nav map!")
+	end
+end
+
+function MesnikDB.SynchronizationMap(Map,NavMesh,TimeBD)
+	local filelocal = {}
+	filelocal.NavMeshfile = string.gsub(D3bot.MapNavMeshPath, "([%w_]+).txt$", Map..".txt")
+	filelocal.NavMesh = file.Read(filelocal.NavMeshfile, "DATA")
+	if filelocal.NavMesh == nil and NavMesh == nil then print("No NavMesh local file and no BD") return
+	elseif filelocal.NavMesh == nil and NavMesh ~= nil then MesnikDB.SaveNavMaptoFile(Map, filelocal.NavMeshfile, NavMesh) return
+	elseif NavMesh ~= nil then
+		filelocal.Time = file.Time(filelocal.NavMeshfile, "DATA")
+		if TimeBD == filelocal.Time then print("NavMesh Time local file == BD") return
+		elseif NavMesh == filelocal.NavMesh then print("NavMesh local file == BD") return
+		elseif TimeBD > filelocal.Time then
+			MesnikDB.SaveNavMaptoFile(Map, filelocal.NavMeshfile, NavMesh) return
+		elseif TimeBD < filelocal.Time then
+			MesnikDB.SaveNavMaptoDB(Map, filelocal.NavMesh, filelocal.Time) return
+		end	
+	end
+end
+
+local D3bot_SaveMapNavMesh = D3bot.SaveMapNavMesh
+
+function D3bot.SaveMapNavMesh()
+	D3bot_SaveMapNavMesh()
+	MesnikDB.SaveNavMaptoDB(game.GetMap(), file.Read(D3bot.MapNavMeshPath, "DATA"), file.Time(D3bot.MapNavMeshPath, "DATA"))
 end
 
 function db:onConnected()
 	print('stas MySQL: Connected!')
-	local q = db:query("CREATE TABLE IF NOT EXISTS `d3botNuv` ( map varchar(225) NOT NULL PRIMARY KEY, date_unix INT UNSIGNED NOT NULL, nav BLOB NOT NULL ); SELECT 1")
+	local q = db:query("CREATE TABLE IF NOT EXISTS `d3botNuv` ( map varchar(225) NOT NULL PRIMARY KEY, date_unix INT UNSIGNED NOT NULL, nav MEDIUMTEXT NOT NULL ); SELECT 1")
 	function q:onSuccess(data)
 		print( "Query successful!" )
-		savedbnav(game.GetMap())
+		MesnikDB.GetNavMapDB(game.GetMap())
     end
      
     function q:onError(err, sql)
