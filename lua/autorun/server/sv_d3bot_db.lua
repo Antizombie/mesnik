@@ -34,8 +34,12 @@ function MesnikDB.GetNavMapDB(Map)
 	local query = db:query(string.format("SELECT * FROM `d3botNuv` WHERE map = '%s'", Map)) -- In mysqloo 9 a query can be started before the database is connected
 	function query:onSuccess(data)
 		local row = data[1]
-		if row == nil then print("No NavMesh map is DB!") end
-		MesnikDB.SynchronizationMap(row["map"],row["nav"],row["date_unix"])
+		if row == nil then
+			print("No NavMesh map is DB!")
+			MesnikDB.SynchronizationMap()
+		else
+			MesnikDB.SynchronizationMap(row["map"],row["nav"],row["date_unix"])
+		end
 	end
 
 	function query:onError(err)
@@ -67,12 +71,14 @@ function MesnikDB.SaveNavMaptoFile(Map,NavMeshfile,NavMesh)
 end
 
 function MesnikDB.SynchronizationMap(Map,NavMesh,TimeBD)
+	local Map = Map or game.GetMap()
 	local filelocal = {}
 	filelocal.NavMeshfile = string.gsub(D3bot.MapNavMeshPath, "([%w_]+).txt$", Map..".txt")
 	filelocal.NavMesh = file.Read(filelocal.NavMeshfile, "DATA")
 	if filelocal.NavMesh == nil and NavMesh == nil then print("No NavMesh local file and no BD") return
 	elseif filelocal.NavMesh == nil and NavMesh ~= nil then MesnikDB.SaveNavMaptoFile(Map, filelocal.NavMeshfile, NavMesh) return
-	elseif NavMesh ~= nil then
+	elseif filelocal.NavMesh ~= nil and NavMesh == nil then MesnikDB.SaveNavMaptoDB(Map, filelocal.NavMesh, file.Time(filelocal.NavMeshfile, "DATA")) return
+	else
 		filelocal.Time = file.Time(filelocal.NavMeshfile, "DATA")
 		if TimeBD == filelocal.Time then print("NavMesh Time local file == BD") return
 		elseif NavMesh == filelocal.NavMesh then print("NavMesh local file == BD") return
