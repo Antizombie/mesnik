@@ -41,7 +41,7 @@ local JoinMessages = {
 }
 
 if not sql.TableExists('authorized_players') then
-	sql.Query("CREATE TABLE authorized_players( SteamID NUMBER , name TEXT )")
+	sql.Query("CREATE TABLE authorized_players( SteamID NUMBER UNIQUE, name TEXT );")
 end
 
 hook.Add( 'PlayerDisconnected', 'dcc', function( player )
@@ -55,18 +55,11 @@ hook.Add( 'PlayerInitialSpawn', 'dcc', function( player )
 		[ 'sid64' ] = player:SteamID64()
 	}
 
-	local fileFormat = string.Replace( player:SteamID(), ':', '_' )
-
-	if file.Exists( 'authorized_players/' .. fileFormat .. '.txt', 'DATA' ) then
-		sql.Query( "INSERT INTO authorized_players ( SteamID, name ) VALUES( " .. sql.SQLStr( info['sid64'] ) .. ", '" .. info[ 'nick' ] .. "' )" )
-		file.Delete( 'authorized_players/' .. fileFormat .. '.txt')
-	end
-
 	local data = sql.Query( "SELECT * FROM authorized_players WHERE SteamID = " .. sql.SQLStr( info['sid64'] ) .. ";")
 	if ( data ) then
 		rzs.NotifyAll( string.format( JoinMessages[ math.random( 1, #JoinMessages ) ], info[ 'nick' ], info[ 'nick' ] ), 3 )
 	else
 		rzs.NotifyAll( 'У нас новенький! Это ' .. info[ 'nick' ], 4 )
-		sql.Query( "INSERT INTO authorized_players ( SteamID, name ) VALUES( " .. sql.SQLStr( info['sid64'] ) .. ", '" .. info[ 'nick' ] .. "' )" )
+		sql.Query( "INSERT INTO authorized_players ( SteamID, name ) VALUES( " .. sql.SQLStr( info['sid64'] ) .. ", '" .. info[ 'nick' ] .. "' );" )
 	end
 end )
